@@ -19,39 +19,41 @@ contract distributionClaim {
         require(contractOwner == msg.sender, "Ownable: caller is not the owner");
         _;
     }
-    
-    function setIdoStartEndTime(uint256 _timestamp) public onlyOwner {
+
+       //dağıtım işlemeri
+
+    function setIdoStartEndTime(uint256 _timestamp) external onlyOwner {
         idoStartTime  = block.timestamp;
         idoEndingTime = block.timestamp + _timestamp * 1 days;
     }
     
-    constructor(address _lockClaimAddress) public onlyOwner {
-         contractOwner = msg.sender;
-        _lockClaim = lockClaim(_lockClaimAddress);
-    }
-    
+    //kazanılan tüm bnb bakiyeleri bu metod ile bu sozleşmeye gönderilecektir.
     function transferToContractAll() public payable onlyOwner{
         
     }
     
-      function getRatioClaimAmount (uint256 a, uint256 b, uint256 amount) internal pure returns(uint256){
+    function getRatioClaimAmount (uint256 a, uint256 b, uint256 amount) internal pure returns(uint256){
          uint256 result = amount.mul(a);
          return result.div(b);
     }
     
+    
+    //verilen tarihler arası hakeden kişinin adresi hangi tier içerisinde ise 
+    // bulunur ve kişinin adresine gönderim yapılır
     function startDistribution() external {
+       
+        uint256 distributionForTier;
+        address contractAddress = address(this);
        
        (bool result,uint256 tierIndex) =  _lockClaim.isAddressClaimableForDistribution(msg.sender,idoStartTime,idoEndingTime);
        uint256 nestSize = _lockClaim.getNestSize();
-       if(result){//dağıtımı hesapla ve gönderim yap
+        
+       require(result,"need right for claim");//dağıtımı hesapla ve gönderim yap
        
-        address contractAddress = address(this);
-
+        
         uint256 totalBalance = contractAddress.balance.div(nestSize);
         
         uint256 newTotalBalance = totalBalance.div(375);
-        
-         uint256 distributionForTier;
         
         if(tierIndex == 1){
            distributionForTier = getRatioClaimAmount(15,100,newTotalBalance);
@@ -65,11 +67,13 @@ contract distributionClaim {
             distributionForTier = getRatioClaimAmount(50,100,newTotalBalance);
         }
         
+
+        
         (bool success, ) =  msg.sender.call.value(distributionForTier)("");
         
         
         require(success, "Transfer failed for startDistribution ");
-       }
+       
         
     }
     
