@@ -37,6 +37,9 @@ contract distributionClaim {
          return result.div(b);
     }
     
+    function canRigtForDistribution() external view returns(uint256){
+       return idoStartTime;
+    }
     
     //verilen tarihler arası hakeden kişinin adresi hangi tier içerisinde ise 
     // bulunur ve kişinin adresine gönderim yapılır
@@ -45,12 +48,11 @@ contract distributionClaim {
         uint256 distributionForTier;
         address contractAddress = address(this);
        
-       (bool result,uint256 tierIndex) =  _lockClaim.isAddressClaimableForDistribution(msg.sender,idoStartTime,idoEndingTime);
-       uint256 nestSize = _lockClaim.getNestSize();
+        (bool result,uint256 tierIndex) =  _lockClaim.isAddressClaimableForDistribution(msg.sender,idoStartTime,idoEndingTime);
+        uint256 nestSize = _lockClaim.getNestSize();
         
-       require(result,"need right for claim");//dağıtımı hesapla ve gönderim yap
+        require(result,"need right for claim");//dağıtımı hesapla ve gönderim yap
        
-        
         uint256 totalBalance = contractAddress.balance.div(nestSize);
         
         uint256 newTotalBalance = totalBalance.div(375);
@@ -67,10 +69,8 @@ contract distributionClaim {
             distributionForTier = getRatioClaimAmount(50,100,newTotalBalance);
         }
         
-
         
         (bool success, ) =  msg.sender.call.value(distributionForTier)("");
-        
         
         require(success, "Transfer failed for startDistribution ");
        
