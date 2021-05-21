@@ -7,8 +7,10 @@ contract lockClaim {
     
     using SafeMath for uint256;
     
+    
     address private contractOwner;
     address private administrator;
+    address private ownerOfBep20Tokens;
     
     struct lockTime {
         uint256 start;
@@ -25,7 +27,7 @@ contract lockClaim {
     
     mapping(address => bool) private registeredAddresses;
     
-    uint256 nestSize=3;
+    uint256 public nestSize=3;
     
     mapping(uint256 => mapping(uint256 => uint256)) private personCountOnTier;
     
@@ -42,9 +44,15 @@ contract lockClaim {
     }
     
     //yuva sayısı ilerde arttırılması ihtimali için
-    function updateNestSize(uint256 _nestSize) private onlyOwner returns  (bool) {
+    function updateNestSize(uint256 _nestSize) external onlyOwner returns  (bool) {
         nestSize = _nestSize;
     }
+    
+     //yuva sayısı ilerde arttırılması ihtimali için
+    function getNestSize() external view returns  (uint256) {
+        return nestSize;
+    }
+    
     
     //sahip olunan tüm yuvaların durumu ancak
     //ifNestFull ve ifTierFull metodlarının tekrar tekrar cagırılıp backende hesaplanıp
@@ -63,34 +71,38 @@ contract lockClaim {
     function ifTierFull(uint256 nestIndex, uint256 tierIndex) external view returns (uint256) {
          return personCountOnTier[nestIndex][tierIndex];
     }
+    
     //4 üstteki 4 metod sırası ile basarılı ise kilitleme metodu cagrılır
     //backendden cagrılan canBeLockable işleminin sonucu basarılı ise backend lock metodunu cagıracaktır. 
-    function lock(uint256 amount,uint256 nestIndex, uint256 tierIndex) external returns (bool){
+    function lock(uint256 nestIndex, uint256 tierIndex) external  {
         require(!registeredAddresses[msg.sender],"this address locked once; no more locking");
         require(personCountOnTier[nestIndex][0] + personCountOnTier[nestIndex][1] + 
         personCountOnTier[nestIndex][2]  < 375, "nest is full; no more locking");
         require(personCountOnTier[nestIndex][tierIndex] < 125,"tier is full; no more locking") ;
-        _BEP20Token.transfer(address(this) ,amount);  //kişi kilitsozleme adresine gönderim yapar
+        uint256 amount;
+        require(nestIndex > 0 && nestIndex <= nestSize,"wrong nestIndex indexes");
+        require(tierIndex > 0 && tierIndex <= 3,"wrong tierIndex indexes");
+        if(tierIndex == 1){
+            amount = 150;
+        }
+        else if(tierIndex == 2){
+            amount = 200;
+        }
+        else {
+            amount = 300;
+        }
+        
+        require(
+            _BEP20Token.transferFrom(msg.sender, address(this), amount) == true,
+            "transferFrom failed, make sure you approved Ant transfer"
+        );
         lockAmountForPerson[msg.sender][nestIndex][tierIndex] = amount; //adrese ait yuvadaki miktar;
         personCountOnTier[nestIndex][tierIndex] = personCountOnTier[nestIndex][tierIndex].add(1);
         counterForClaimablePerson = counterForClaimablePerson.add(1);
         registeredAddresses[msg.sender] = true;
         durationOflockTimeforPerson[msg.sender] = lockTime(block.timestamp,block.timestamp);
-        return true;
     }
     
-      function lockTest(uint256 amount,uint256 nestIndex, uint256 tierIndex) public returns (bool){
-        require(!registeredAddresses[msg.sender],"this address locked once; no more locking");
-        require(personCountOnTier[nestIndex][0] + personCountOnTier[nestIndex][1] + 
-        personCountOnTier[nestIndex][2]  < 375, "nest is full; no more locking");
-        require(personCountOnTier[nestIndex][tierIndex] < 125,"tier is full; no more locking") ;
-        lockAmountForPerson[msg.sender][nestIndex][tierIndex] = amount; //adrese ait yuvadaki miktar;
-        personCountOnTier[nestIndex][tierIndex] = personCountOnTier[nestIndex][tierIndex].add(1);
-        counterForClaimablePerson = counterForClaimablePerson.add(1);
-        registeredAddresses[msg.sender] = true;
-        durationOflockTimeforPerson[msg.sender] = lockTime(block.timestamp,block.timestamp);
-        return true;
-    }
     
     // çekme işlemi öncesi süresi dolmuşsa kesinti olmayacağı mesajı çıkacak
     // süresi dolmamışsa kesinti olacağı bilgisi verilecek;
@@ -98,7 +110,7 @@ contract lockClaim {
     // 1
     function canBeClaimable() external view returns (uint256){
         require(registeredAddresses[msg.sender]);
-        return startOflockTimeforPerson[msg.sender].startTime;
+        return durationOflockTimeforPerson[msg.sender].start;
     }
     function getRatioClaimAmount (uint256 a, uint256 b, uint256 amount) internal pure returns(uint256){
          uint256 result = amount.mul(a);
@@ -116,83 +128,7 @@ contract lockClaim {
       _BEP20Token.transferFrom(address(this) ,administrator, allRestBalance); 
     }
     //2    
-    function claimTest() public returns (uint256){
-        require(registeredAddresses[msg.sender],"address has claim right");
   
-        //kullanıcını hangi yuva ve tier içerisinde kilitleme yaptığı bulunmalı;
-        mapping(uint256 => mapping(uint256 => uint256))  storage s = lockAmountForPerson[msg.sender];
-        uint256 nestIndexLocal=100;
-        uint256 tierIndexLocal=100;
-        for(uint256 i =1;i<=nestSize;i++){
-            if(s[i][1] != 0 ){
-                nestIndexLocal = i;
-                tierIndexLocal = 1;
-                break;
-            }
-            else if(s[i][2] != 0 ){
-                nestIndexLocal = i;
-                tierIndexLocal = 2;
-                break;
-            }
-            else if(s[i][3] != 0 ){
-                nestIndexLocal = i;
-                tierIndexLocal = 3;
-                break;
-            }
-        }
-       
-        
-        require(nestIndexLocal!=100,"Error on calculation"); 
- 
-        uint256 _amountWillClaim = lockAmountForPerson[msg.sender][nestIndexLocal][tierIndexLocal];
-        uint256 _lockTime = startOflockTimeforPerson[msg.sender].startTime;
-        
-       
-        if(now > _lockTime + 90 * 1 days ) {
-           // _amountWillClaim = _amountWillClaim;
-        }
-        else if(now > _lockTime + 60 * 1 days ){
-            //%95
-            _amountWillClaim = getRatioClaimAmount(95,100,_amountWillClaim);
-        }
-        else if(now > _lockTime + 30 * 1 days ){
-            //%90
-            _amountWillClaim = getRatioClaimAmount(90,100,_amountWillClaim);
-        }
-        else if(now > _lockTime + 20 * 1 days ){
-            //%80
-            _amountWillClaim = getRatioClaimAmount(80,100,_amountWillClaim);
-        }
-        else if(now > _lockTime + 10 * 1 days ){
-            //%75
-            _amountWillClaim = getRatioClaimAmount(75,100,_amountWillClaim);
-        }
-        else if(now > _lockTime +  2 days ) {
-             _amountWillClaim = getRatioClaimAmount(65,100,_amountWillClaim);
-        }
-        
-        else if(now > _lockTime +  1 days ) {
-             _amountWillClaim = getRatioClaimAmount(40,100,_amountWillClaim);
-        }
-        
-        else{
-            //%70
-            _amountWillClaim = getRatioClaimAmount(70,100,_amountWillClaim);
-        }
-        
-        
-         
-         //_BEP20Token.transferFrom(address(this) , msg.sender,_amountWillClaim); 
-         lockAmountForPerson[msg.sender][nestIndexLocal][tierIndexLocal] = _amountWillClaim;
-         personIdoLockTimer storage idoTime = startOflockTimeforPerson[msg.sender];
-         idoTime.startTime = 0;
-         idoTime.endTime = block.timestamp; 
-         registeredAddresses[msg.sender] = false;
-         counterForClaimablePerson = counterForClaimablePerson.sub(1);
- 
-    }
-    
-    
     function claim() external returns (bool){
         require(registeredAddresses[msg.sender],"address has claim right");
   
@@ -219,7 +155,7 @@ contract lockClaim {
             }
         }
         
-        require(nestIndexLocal!=100,"Error on calculation"); 
+        require(nestIndexLocal != 100,"Error on calculation"); 
         uint256 _amountWillClaim = lockAmountForPerson[msg.sender][nestIndexLocal][tierIndexLocal];
         uint256 _lockTime = durationOflockTimeforPerson[msg.sender].start;
         if(now > _lockTime + 90 * 1 days ) {
@@ -254,8 +190,13 @@ contract lockClaim {
             _amountWillClaim = getRatioClaimAmount(70,100,_amountWillClaim);
         }
         
-         _BEP20Token.transferFrom(address(this) , msg.sender,_amountWillClaim); 
+        require(
+            _BEP20Token.transferFrom(address(this),msg.sender, amount) == true,
+            "claim failed, make sure you approved Ant transfer"
+        );
+
          lockAmountForPerson[msg.sender][nestIndexLocal][tierIndexLocal] = 0;
+         personCountOnTier[nestIndexLocal][tierIndexLocal] = personCountOnTier[nestIndexLocal][tierIndexLocal].sub(1);
          lockTime storage idoTime = durationOflockTimeforPerson[msg.sender];
          idoTime.end = block.timestamp; 
          registeredAddresses[msg.sender] = false;
@@ -263,27 +204,52 @@ contract lockClaim {
         
     }
     
-    //4. claim işlemi dağıtımı hesaplaması
-     function isAddressClaimableForDistribution(address sender,uint256 idoStartTime,uint256 idoEndingTime) external view returns(bool) {
+    //2.claim işlemi dağıtımı hesaplaması
+     function isAddressClaimableForDistribution(address sender,uint256 idoStartTime,uint256 idoEndingTime) external view returns(bool,uint256) {
         uint256 start = durationOflockTimeforPerson[sender].start;
         uint256 end  = durationOflockTimeforPerson[sender].end;    
+  
+        //kullanıcını hangi yuva ve tier içerisinde kilitleme yaptığı bulunmalı;
+        mapping(uint256 => mapping(uint256 => uint256))  storage s = lockAmountForPerson[msg.sender];
+        uint256 nestIndexLocal=100;
+        uint256 tierIndexLocal=100;
+        
+        for(uint256 i =1;i<=nestSize;i++){
+            if(s[i][1] != 0 ){
+                nestIndexLocal = i;
+                tierIndexLocal = 1;
+                break;
+            }
+            else if(s[i][2] != 0 ){
+                nestIndexLocal = i;
+                tierIndexLocal = 2;
+                break;
+            }
+            else if(s[i][3] != 0 ){
+                nestIndexLocal = i;
+                tierIndexLocal = 3;
+                break;
+            }
+        }
+        
+        require(nestIndexLocal!=100,"Error on calculation"); 
         
         if(start <= idoStartTime){
             if(start == end){ // kilitleme bozulmamış
-              return true;
+              return (true,tierIndexLocal);
             }
             else if(end >= idoEndingTime ) {
-              return true;
+              return (true,tierIndexLocal);
             }
             else{
-              return false;
+              return (false,0);
             }
         }
         
         else{
-            return false;
+            return (false,0);
         }
         
     }
-    
+
 }
