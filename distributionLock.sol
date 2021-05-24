@@ -4,8 +4,6 @@ import './lockClaim.sol';
 import './SafeMath.sol';
 
 contract distributionClaim {
- 
-    lockClaim private _lockClaim;
     
     using SafeMath for uint256;
     
@@ -15,9 +13,16 @@ contract distributionClaim {
     
     uint256 private idoEndingTime;
     
+    lockClaim private _lockClaim;
+    
     modifier onlyOwner() {
         require(contractOwner == msg.sender, "Ownable: caller is not the owner");
         _;
+    }
+    
+    constructor(address _lockClaimAddress) public {
+         contractOwner = msg.sender;
+        _lockClaim = lockClaim(_lockClaimAddress);
     }
 
        //dağıtım işlemeri
@@ -32,18 +37,26 @@ contract distributionClaim {
         
     }
     
+     function depositUsingVariable() public payable { 
+
+    
+
+    }
+
+  
+    
     function getRatioClaimAmount (uint256 a, uint256 b, uint256 amount) internal pure returns(uint256){
          uint256 result = amount.mul(a);
          return result.div(b);
     }
     
-    function canRigtForDistribution() external view returns(uint256){
-       return idoStartTime;
+    function canRigtForDistribution() external view returns(uint256,uint256){
+       return (idoStartTime,idoEndingTime);
     }
     
     //verilen tarihler arası hakeden kişinin adresi hangi tier içerisinde ise 
     // bulunur ve kişinin adresine gönderim yapılır
-    function startDistribution() external {
+    function startDistribution() external payable{
        
         uint256 distributionForTier;
         address contractAddress = address(this);
@@ -69,11 +82,9 @@ contract distributionClaim {
             distributionForTier = getRatioClaimAmount(50,100,newTotalBalance);
         }
         
+        msg.sender.transfer(distributionForTier);
         
-        (bool success, ) =  msg.sender.call.value(distributionForTier)("");
-        
-        require(success, "Transfer failed for startDistribution ");
-       
+
         
     }
     
