@@ -16,6 +16,7 @@ contract lockClaim {
         uint256 start;
         uint256 end;
     }
+
     
     //kişi => yuva indeksi => tier_indeksi => nekadarlık kilitleme yaptığı
     
@@ -36,6 +37,10 @@ contract lockClaim {
     modifier onlyOwner() {
         require(contractOwner == msg.sender, "Ownable: caller is not the owner");
         _;
+    }
+
+    function setAdministrator(address administratorAddress) external onlyOwner(){
+        administrator = administratorAddress;
     }
 
     constructor(address _BEP20TokenAddress) public {
@@ -109,7 +114,7 @@ contract lockClaim {
     // sonuç backend ile kıyaslanacak sorun yoksa claim metodu çağrılacak
     // 1
     function canBeClaimable() external view returns (uint256){
-        require(registeredAddresses[msg.sender]);
+        require(registeredAddresses[msg.sender],"address not rights fşr first claim");
         return durationOflockTimeforPerson[msg.sender].start;
     }
     function getRatioClaimAmount (uint256 a, uint256 b, uint256 amount) internal pure returns(uint256){
@@ -125,7 +130,11 @@ contract lockClaim {
     function claimAllBalances() public onlyOwner {
        require(counterForClaimablePerson == 0, "Still Some Person With Balances");
        uint256 allRestBalance = _BEP20Token.balanceOf(address(this));
-      _BEP20Token.transferFrom(address(this) ,administrator, allRestBalance); 
+        require(
+            _BEP20Token.transfer(administrator, allRestBalance) == true,
+            "claimAllBalances failed, make sure you approved Ant transfer"
+        );
+
     }
     //2    
   
@@ -191,7 +200,7 @@ contract lockClaim {
         }
         
         require(
-            _BEP20Token.transferFrom(address(this),msg.sender, amount) == true,
+            _BEP20Token.transfer(msg.sender, _amountWillClaim) == true,
             "claim failed, make sure you approved Ant transfer"
         );
 
@@ -204,13 +213,18 @@ contract lockClaim {
         
     }
     
+    function getDurationOflockTimeforPerson() external view returns(uint256,uint256){
+        return (durationOflockTimeforPerson[msg.sender].start,durationOflockTimeforPerson[msg.sender].end);
+    }
+    
+    
     //2.claim işlemi dağıtımı hesaplaması
      function isAddressClaimableForDistribution(address sender,uint256 idoStartTime,uint256 idoEndingTime) external view returns(bool,uint256) {
         uint256 start = durationOflockTimeforPerson[sender].start;
         uint256 end  = durationOflockTimeforPerson[sender].end;    
   
         //kullanıcını hangi yuva ve tier içerisinde kilitleme yaptığı bulunmalı;
-        mapping(uint256 => mapping(uint256 => uint256))  storage s = lockAmountForPerson[msg.sender];
+        mapping(uint256 => mapping(uint256 => uint256))  storage s = lockAmountForPerson[sender];
         uint256 nestIndexLocal=100;
         uint256 tierIndexLocal=100;
         
